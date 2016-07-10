@@ -12,29 +12,44 @@ var mimetypes = {
   '.js': 'application/javascript'
 };
 //function to read html files and other mimetypes
-//function to send these files on being requested
+function accessFile(filePath){
+  return new Promise((resolve,reject)=>{
+    fs.access(filePath, fs.F_OK, error=>{
+      if(!error) resolve(filePath);
+      else reject(filePath);
+    })
+  });
+};
+//function to stream these files on being requested
+function sendFile(filePath){
+  return new Promise((resolve, reject)=>{
+    let fileStream = fs.createReadStream(filePath);
+    fileStream.on("open", ()=>{
+      resolve(fileStream);
+    });
+    fileStream.on("error", ()=>{
+      reject(fileStream);
+    });
+  });
+};
+
 
 function server(req,res){
   let baseURI = url.parse(req.url, true);
   var routeURL = __dirname + (baseURI.pathname === '/' ? '/index.htm' : baseURI.pathname);
   console.log(routeURL);
-  fs.access(routeURL, fs.F_OK, error=>{
-    if (!error){
-      //read the file...purposely using readFile() and not stream to show callback hell and bad resource hogging programming
-      fs.readFile(routeURL,(error, content)=>{
-        let filetype = path.extname(routeURL);
-        let contentType = mimetypes[filetype];
-        if(!error){
-        res.writeHead(200, {'Content-type':contentType});
-        res.end(content, 'utf-8');}
-      });
-    } else {
-      //if reading error then 404
-      res.writeHead(404, {'Content-type':'text/html'});
-      res.end("content not found", 'utf-8');
-          }
-  });
+  let filetype = path.extname(routeURL);
+  let contentType = mimetypes[filetype];
+  accessFile(routeURL)
+    .then(sendFile)
+    .then((content)=>{
+      res.writeHead(200, {"Content-type" : contentType});
+      content.pipe(res);
+    }).catch(error=>{
+      console.log(error)
+    });
 };
+//
 
 //create HTTP SERVER at 3000
 http.createServer((request,response)=>{
